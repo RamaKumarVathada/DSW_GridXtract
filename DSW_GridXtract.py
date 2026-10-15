@@ -687,3 +687,4 @@ class DSW_GridXtract:
     def run(self):
         self.dialog = DSW_GridXtractDialog(self.iface, self.iface.mainWindow())
         self.dialog.show()
+```[cite: 1]
