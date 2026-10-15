@@ -2,13 +2,14 @@
 """
 DSW_GridXtract — QGIS Plugin
 ==============================================
-Version: 1.9.00 (Process Mode Selection + Dynamic Folder/Files + Logging + Track Stats)
+Version: 2.0.00 (Process Mode Selection + Dynamic Folder/Files + Logging + Track Stats)
 Garmin Internal Use only....!!!!
 Author : Rama Kumar Vathada
 """
 
 import os
-import random
+import secrets
+import sys
 import time
 from datetime import datetime
 
@@ -47,7 +48,7 @@ except AttributeError:
 class AllInOneQaTask(QgsTask):
     """Pipeline: Cascades AOI -> Sonar -> Errors (or just AOI based on mode) instantly."""
     def __init__(self, description, mode, grid_path, aoi_path, sonar_path, errors_path, out_dir, date_suffix, transform_context, callback):
-        super().__init__(description, QgsTask.CanCancel)
+        super().__init__(description, QgsTask.TaskFlag.CanCancel)
         self.mode = mode
         self.grid_path = grid_path
         self.aoi_path = aoi_path
@@ -142,7 +143,7 @@ class AllInOneQaTask(QgsTask):
             save_opts = QgsVectorFileWriter.SaveVectorOptions()
             save_opts.driverName = "ESRI Shapefile"
             save_opts.fileEncoding = "UTF-8"
-            save_opts.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteFile
+            save_opts.actionOnExistingFile = QgsVectorFileWriter.ActionOnExistingFile.CreateOrOverwriteFile
             
             base_fields, wkb, crs = grid_layer.fields(), grid_layer.wkbType(), grid_layer.crs()
             
@@ -160,7 +161,7 @@ class AllInOneQaTask(QgsTask):
                 
                 writers.extend([w_static, w_dynamic, w_err_with, w_err_no])
 
-            if any(w.hasError() != QgsVectorFileWriter.NoError for w in writers):
+            if any(w.hasError() != QgsVectorFileWriter.WriterError.NoError for w in writers):
                 self.error_msg = "Failed to initialize one or more output shapefiles."
                 return False
 
@@ -212,7 +213,6 @@ class AllInOneQaTask(QgsTask):
                 sonar_cids = sonar_index.intersects(bbox)
                 
                 if sonar_cids:
-                    # Minor speedup: assign constGet to variable to avoid repeated C++ bindings calls
                     geom_const = geom.constGet()
                     geom_engine = QgsGeometry.createGeometryEngine(geom_const)
                     geom_engine.prepareGeometry()
@@ -221,7 +221,6 @@ class AllInOneQaTask(QgsTask):
                         if geom_engine.intersects(sonar_geoms[cid].constGet()):
                             track_count += 1
                             
-                # Tracking highest track count globally
                 if track_count > self.stats["max_track_count"]:
                     self.stats["max_track_count"] = track_count
                         
@@ -256,13 +255,11 @@ class AllInOneQaTask(QgsTask):
                 if error_hit:
                     buf_err_with.append(dyn_feat)
                     self.stats["err_with"] += 1
-                    # Track > 250 for error tiles
                     if track_count > 250:
                         self.stats["err_with_250_plus"] += 1
                 else:
                     buf_err_no.append(dyn_feat)
                     self.stats["err_no"] += 1
-                    # Track > 250 for non-error tiles
                     if track_count > 250:
                         self.stats["err_no_250_plus"] += 1
 
@@ -291,23 +288,15 @@ class DSW_GridXtractDialog(QDialog):
     def __init__(self, iface, parent=None):
         super().__init__(parent)
         self.iface = iface
-        self.setWindowTitle("DSW GridXtract Plugin (v1.9.00)")
+        self.setWindowTitle("DSW GridXtract Plugin (v2.0.00)")
         self.setFixedSize(600, 305)
         
-        # ==========================================
-        # WINDOWS 7 AERO GLASS THEME SETTINGS
-        # ==========================================
-        # 1. Base Opacity (Transparency)
         self.setWindowOpacity(0.97) 
         
-        # 2. Aero Glass CSS Styling
         self.setStyleSheet("""
-            /* Main Dialog Background: Soft translucent blue/gray tint */
             QDialog {
                 background-color: rgba(224, 235, 235, 180);
             }
-
-            /* Windows 7 Style Group Boxes */
             QGroupBox {
                 background-color: rgba(255, 255, 255, 60);
                 border: 1px solid rgba(255, 255, 255, 200);
@@ -322,14 +311,10 @@ class DSW_GridXtractDialog(QDialog):
                 font-weight: bold;
                 left: 10px;
             }
-
-            /* Standard Labels */
             QLabel {
                 color: #1a1a1a;
                 font-size: 12px;
             }
-
-            /* Windows 7 Glossy Buttons */
             QPushButton {
                 border: 1px solid #707070;
                 border-radius: 3px;
@@ -341,14 +326,12 @@ class DSW_GridXtractDialog(QDialog):
             }
             QPushButton:hover {
                 border: 1px solid #3c7fb1;
-                /* Light blue glowing gradient on hover */
                 background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
                                                   stop: 0 #eaf6fd, stop: 0.5 #d9f0fc,
                                                   stop: 0.51 #bee6fd, stop: 1 #a7d9f5);
             }
             QPushButton:pressed {
                 border: 1px solid #2c628b;
-                /* Darker blue gradient when clicked */
                 background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
                                                   stop: 0 #e5f4fc, stop: 0.5 #c4e5f6,
                                                   stop: 0.51 #98d1ef, stop: 1 #68b3db);
@@ -358,8 +341,6 @@ class DSW_GridXtractDialog(QDialog):
                 background-color: #cccccc;
                 color: #777777;
             }
-
-            /* Windows 7 Glossy Progress Bar */
             QProgressBar {
                 border: 1px solid #bcbcbc;
                 border-radius: 3px;
@@ -369,14 +350,12 @@ class DSW_GridXtractDialog(QDialog):
                 font-weight: bold;
             }
             QProgressBar::chunk {
-                /* Classic Win7 green progress gradient */
                 background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
                                                   stop: 0 #85ed73, stop: 0.5 #57d943,
                                                   stop: 0.51 #3fce2a, stop: 1 #22b10f);
                 border-radius: 2px;
             }
         """)
-        # ==========================================
 
         self.timer = QTimer()
         self.timer.timeout.connect(self._update_time_and_status)
@@ -390,7 +369,6 @@ class DSW_GridXtractDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout()
         
-        # --- MODE SELECTION ---
         grp_mode = QGroupBox("Select Required Extraction Mode")
         
         mode_widget = QWidget()
@@ -444,7 +422,6 @@ class DSW_GridXtractDialog(QDialog):
         
         self.btn_all.toggled.connect(self._toggle_inputs)
         
-        # --- INPUTS ---
         grp_inputs = QGroupBox("Select Input Layers")
         form = QFormLayout()
         
@@ -476,7 +453,6 @@ class DSW_GridXtractDialog(QDialog):
         grp_inputs.setLayout(form)
         layout.addWidget(grp_inputs)
 
-        # --- RUN BUTTON ---
         self.run_button = QPushButton(" Run GridXtract Process")
         self.run_button.setStyleSheet("""
             QPushButton {
@@ -488,7 +464,6 @@ class DSW_GridXtractDialog(QDialog):
         self.run_button.clicked.connect(self._handle_processing)
         layout.addWidget(self.run_button)
 
-        # --- STATUS & PROGRESS ---
         self.status_layout = QHBoxLayout()
         
         self.progress_bar = QProgressBar()
@@ -546,7 +521,7 @@ class DSW_GridXtractDialog(QDialog):
                     symbol = QgsSymbol.defaultSymbol(layer.geometryType())
                     if symbol.symbolLayerCount() > 0:
                         symbol.symbolLayer(0).setBrushStyle(NO_BRUSH_STYLE)
-                        symbol.symbolLayer(0).setStrokeColor(QColor(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255), 255))
+                        symbol.symbolLayer(0).setStrokeColor(QColor(secrets.randbelow(256), secrets.randbelow(256), secrets.randbelow(256), 255))
                         symbol.symbolLayer(0).setStrokeWidth(0.5)
                     categories.append(QgsRendererCategory(value, symbol, str(value)))
                 layer.setRenderer(QgsCategorizedSymbolRenderer(target_field, categories))
@@ -575,20 +550,15 @@ class DSW_GridXtractDialog(QDialog):
         
         mode = "Full Process" if self.btn_all.isChecked() else "pending_only"
 
-        # -------------------------------------------------------------
-        # Generate Dynamic Date Folder & File Suffix
-        # -------------------------------------------------------------
         self.date_suffix = datetime.now().strftime("%d%b%y")
         folder_suffix = self.date_suffix.upper()
         
         aoi_dir = os.path.dirname(aoi)
         self.out_dir = os.path.join(aoi_dir, f"OUTPUTDIR_{folder_suffix}")
         os.makedirs(self.out_dir, exist_ok=True)
-        # -------------------------------------------------------------
         
         proj = QgsProject.instance()
         
-        # Remove previously loaded layers that start with these base names
         target_prefixes = ["DSW_Pending_tiles", "Dynamic_tiles", "Static_tiles", "Dynamic_tiles_with_Errors", "Dynamic_tiles_without_Errors"]
         for layer in list(proj.mapLayers().values()):
             if any(layer.name().startswith(prefix) for prefix in target_prefixes):
@@ -624,7 +594,6 @@ class DSW_GridXtractDialog(QDialog):
         log_file_path = os.path.join(self.out_dir, f"Grid_process_log_{self.date_suffix}.txt")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Write Log tailored to the selected mode
         try:
             with open(log_file_path, "a", encoding="utf-8") as log_file:
                 log_file.write(f"=== GridXtract Process Run ({mode}): {timestamp} ===\n")
@@ -649,8 +618,8 @@ class DSW_GridXtractDialog(QDialog):
                     log_file.write(f"TIME ELAPSED: {final_time}\n\n")
                     log_file.write(f"ERROR DETAILS:\n{error_msg}\n")
                 log_file.write("====================================================\n\n")
-        except Exception:
-            pass 
+        except Exception as log_err:
+            print(f"Failed to write log file: {log_err}", file=sys.stderr)
 
         if not success:
             self.time_label.setText(f"Process Failed  |  ⏱ {final_time}")
@@ -659,7 +628,6 @@ class DSW_GridXtractDialog(QDialog):
             
         self.time_label.setText(f"GridXtract Process Finished  |  ⏱ {final_time}")
 
-        # Load correct layers into QGIS based on mode
         layer_configs = [(self.task.p_pending, f"DSW_Pending_tiles_{self.date_suffix}")]
         if mode == "Full Process":
             layer_configs.extend([
@@ -677,7 +645,6 @@ class DSW_GridXtractDialog(QDialog):
                     self._apply_symbology(layer, random_color=("Pending" in name or "Error" in name))
                     proj.addMapLayer(layer)
 
-        # Build Summary String
         summary = f"Grid Extraction Process completed successfully in {final_time}!\n\n"
         summary += f"--- Grid Extraction Summary ---\n"
         summary += f"Total Pending Tiles in AOI: {stats['pending']}\n\n"
