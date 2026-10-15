@@ -1,0 +1,16 @@
+[general]
+name=DSW GridXtract
+qgisMinimumVersion=3.0
+experimental=False
+qgisMaximumVersion=4.99
+description=The DSW GridXtract Plugin is a high-performance QGIS plugin that uses a single-pass cascading spatial pipeline to rapidly evaluate grid datasets against areas of interest, sonar tracks, and error geometries.
+about=The DSW GridXtract Plugin has been upgraded to a Dialog Edition featuring an all-in-one, high-performance spatial pipeline. This version introduces a single-pass cascading architecture that evaluates Target Areas, Sonar Tracks, and Error data simultaneously, writing to all five output shapefiles in a single iteration.(Note: Garmin Internal Use Only)
+Version:1.9.00
+author=Rama Kumar Vathada
+Updates= 
+tags=Grid,extraction,spatial-index,Process,Multiple-Process,background-task,performance,rtree
+homepage=
+repository=
+tracker=
+icon=DSW_GridXtract.png
+category=Vector
